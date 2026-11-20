@@ -370,6 +370,32 @@ export async function pasteComposerTestImage(page: Page): Promise<boolean> {
   }, COMPOSER_TEST_IMAGE_BASE64);
 }
 
+/**
+ * Paste a file the way Firefox and Chrome deliver one copied in a file manager: the File itself
+ * plus its file:// URI as text. Returns whether the composer took over the paste.
+ */
+export async function pasteFileIntoComposer(
+  page: Page,
+  file: { name: string; mimeType: string; buffer: Buffer },
+): Promise<boolean> {
+  return composerInput(page).evaluate(
+    (input, { name, mimeType, base64 }) => {
+      const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+      const clipboardData = new DataTransfer();
+      clipboardData.items.add(new File([bytes], name, { type: mimeType }));
+      clipboardData.setData("text/plain", `file:///tmp/${name}`);
+      const event = new ClipboardEvent("paste", {
+        clipboardData,
+        bubbles: true,
+        cancelable: true,
+      });
+      input.dispatchEvent(event);
+      return event.defaultPrevented;
+    },
+    { name: file.name, mimeType: file.mimeType, base64: file.buffer.toString("base64") },
+  );
+}
+
 export async function enterComposerFullscreen(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Fullscreen", exact: true }).click();
 }

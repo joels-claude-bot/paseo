@@ -64,8 +64,10 @@ import {
   collectImageFilesFromClipboardData,
   filesToImageAttachments,
 } from "@/utils/image-attachments-from-files";
+import { isRasterImageFile } from "@/attachments/file-types";
 import type { ComposerAttachment } from "@/attachments/types";
 import type { ImageAttachment, MessagePayload, TextReplacement } from "@/composer/types";
+import type { DroppedItem } from "@/components/file-drop/types";
 import { focusWithRetries } from "@/utils/web-focus";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -173,6 +175,8 @@ export interface MessageInputProps {
   attachmentMenuItems: AttachmentMenuItem[];
   onAttachButtonRef?: (node: View | null) => void;
   onAddImages?: (images: ImageAttachment[]) => void;
+  /** Web paste of files copied from a file manager; same handler as a drop onto the composer. */
+  onAddFiles?: (items: DroppedItem[]) => void;
   onPasteImages?: (files: readonly NativePastedFile[]) => void;
   client: DaemonClient | null;
   /** Dictation start gate from host runtime (socket connected + directory ready). */
@@ -524,6 +528,7 @@ interface PasteEffectArgs {
   isDictating: boolean;
   isRealtimeVoiceForCurrentAgent: boolean;
   onAddImages: ((images: ImageAttachment[]) => void) | undefined;
+  onAddFiles: ((items: DroppedItem[]) => void) | undefined;
 }
 
 function usePasteEffect(args: PasteEffectArgs): void {
@@ -534,6 +539,7 @@ function usePasteEffect(args: PasteEffectArgs): void {
     isDictating,
     isRealtimeVoiceForCurrentAgent,
     onAddImages,
+    onAddFiles,
   } = args;
 
   useEffect(() => {
@@ -545,8 +551,18 @@ function usePasteEffect(args: PasteEffectArgs): void {
     const handlePaste = (event: ClipboardEvent) => {
       if (disabled || isDictating || isRealtimeVoiceForCurrentAgent) return;
 
+      // Firefox and Chrome expose a file copied in a file manager (text/uri-list) as a File here.
+      // Raster images are skipped by onAddFiles and attached by the image path below.
+      const pastedFiles = Array.from(event.clipboardData?.files ?? []);
+      const hasNonImageFile = pastedFiles.some((file) => !isRasterImageFile(file));
+      if (hasNonImageFile && isConnected && onAddFiles) {
+        event.preventDefault();
+        onAddFiles(pastedFiles.map((file) => ({ kind: "web-file", file })));
+      }
+
       const imageFiles = collectImageFilesFromClipboardData(event.clipboardData);
       if (imageFiles.length === 0) {
+        if (event.defaultPrevented) return;
         if (pasteLinkedClipboardText(textarea, event.clipboardData)) event.preventDefault();
         return;
       }
@@ -570,7 +586,15 @@ function usePasteEffect(args: PasteEffectArgs): void {
       disposed = true;
       textarea.removeEventListener?.("paste", handlePaste);
     };
-  }, [disabled, textarea, isConnected, isDictating, isRealtimeVoiceForCurrentAgent, onAddImages]);
+  }, [
+    disabled,
+    textarea,
+    isConnected,
+    isDictating,
+    isRealtimeVoiceForCurrentAgent,
+    onAddImages,
+    onAddFiles,
+  ]);
 }
 
 function useAutoFocusOnWebEffect(
@@ -1178,6 +1202,7 @@ interface ResolvedMessageInputProps {
   attachmentMenuItems: AttachmentMenuItem[];
   onAttachButtonRef: ((node: View | null) => void) | undefined;
   onAddImages: ((images: ImageAttachment[]) => void) | undefined;
+  onAddFiles: ((items: DroppedItem[]) => void) | undefined;
   onPasteImages: ((files: readonly NativePastedFile[]) => void) | undefined;
   client: DaemonClient | null;
   isReadyForDictation: boolean | undefined;
@@ -1226,6 +1251,7 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     attachmentMenuItems: props.attachmentMenuItems,
     onAttachButtonRef: props.onAttachButtonRef,
     onAddImages: props.onAddImages,
+    onAddFiles: props.onAddFiles,
     onPasteImages: props.onPasteImages,
     client: props.client,
     isReadyForDictation: props.isReadyForDictation,
@@ -1308,6 +1334,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       attachmentMenuItems,
       onAttachButtonRef,
       onAddImages,
+      onAddFiles,
       onPasteImages,
       client,
       isReadyForDictation,
@@ -1861,6 +1888,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isDictating,
       isRealtimeVoiceForCurrentAgent,
       onAddImages,
+      onAddFiles,
     });
 
     const handleSelectionChange = useCallback(

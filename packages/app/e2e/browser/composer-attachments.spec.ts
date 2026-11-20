@@ -18,6 +18,7 @@ import {
   expectAttachButtonDisabled,
   fillComposerDraft,
   dropFileOnComposer,
+  pasteFileIntoComposer,
   sendDraftToQueue,
   expectQueuedMessageButton,
   startRunningMockAgent,
@@ -178,6 +179,22 @@ test.describe("Composer attachments", () => {
       await dropFileOnComposer(page, TEST_JSON);
       await expectAttachmentPill(page, "composer-file-attachment-pill");
     });
+  });
+
+  test("pasted non-image file attaches instead of pasting its file path", async ({
+    page,
+    withWorkspace,
+  }) => {
+    test.setTimeout(60_000);
+    const workspace = await withWorkspace({ prefix: "attach-paste-file-" });
+    await workspace.navigateTo();
+    await clickNewChat(page);
+    await expectComposerVisible(page);
+
+    expect(await pasteFileIntoComposer(page, TEST_JSON)).toBe(true);
+
+    await expect(page.getByTestId("composer-file-attachment-pill")).toContainText(TEST_JSON.name);
+    await expectComposerDraft(page, "");
   });
 
   test("dropped JSON file renders as a file attachment in New Workspace", async ({ page }) => {

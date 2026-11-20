@@ -2623,6 +2623,7 @@ function ComposerContentImpl({
                   attachmentMenuItems={attachmentMenuItems}
                   onAttachButtonRef={handleAttachButtonRef}
                   onAddImages={addImages}
+                  onAddFiles={handleGenericFilesDropped}
                   onPasteImages={handleNativePasteImages}
                   client={client}
                   isReadyForDictation={isDictationReady}
